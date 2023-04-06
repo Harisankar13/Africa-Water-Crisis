@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import statsmodels.api as sm
+from pandas.plotting import scatter_matrix
 
 indicator = ['NY.GDP.PCAP.PP.CD', 'SI.POV.GINI', 'SE.XPD.TOTL.GD.ZS', 
              'SE.PRM.CMPT.FE.ZS','SE.PRM.CMPT.MA.ZS', 'EG.ELC.ACCS.ZS',
@@ -118,7 +120,7 @@ g.fig.suptitle('Mean Freshwater Withdrawal by Country Quartile')
 
 
 
-#Plot quartiles separately 
+# Plot quartiles separately 
 df_drop = df_wb.dropna(subset=['% Annual Freshwater Withdrawals (internal)'])
 
 #create a new column with quartile information
@@ -140,3 +142,66 @@ for quartile in quartiles:
     ax.set_title('Mean Freshwater Withdrawal by Country - ' + quartile)
     ax.set_xlabel('Country')
     ax.set_ylabel('% Annual Freshwater Withdrawals (internal)')
+    
+    
+# Drop outliers
+
+#calculate the lower and upper bounds for outliers using the IQR method
+Q1 = df_wb['% Annual Freshwater Withdrawals (internal)'].quantile(0.25)
+Q3 = df_wb['% Annual Freshwater Withdrawals (internal)'].quantile(0.75)
+IQR = Q3 - Q1
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+
+outliers = df_wb.loc[(df_wb['% Annual Freshwater Withdrawals (internal)'] < lower_bound) | 
+                      (df_wb['% Annual Freshwater Withdrawals (internal)'] > upper_bound)]
+df_reg = df_wb.drop(outliers.index)
+df_reg = df_reg = df_reg.dropna()
+
+
+# Regressions
+X = df_reg[['Per Capita GDP', '% GDP on Edu', '% of GDP on Health']]
+X = sm.add_constant(X)
+y = df_reg['% Annual Freshwater Withdrawals (internal)']
+model = sm.OLS(y, X).fit()
+print(model.summary())
+
+
+#plot the predicted values against the actual values
+fig, ax = plt.subplots()
+ax.scatter(y, model.predict(), edgecolors=(0, 0, 0))
+ax.plot([y.min(), y.max()], [y.min(), y.max()], 'k--', lw=4)
+ax.set_xlabel('Actual')
+ax.set_ylabel('Predicted')
+ax.set_title('Annual Freeshwater Withdrawals vs. Predicted Annual Freshwater Withdrawals')
+plt.show()
+
+
+#lasso
+from sklearn.linear_model import Lasso
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+
+X = df_reg[['% Annual Freshwater Withdrawals (internal)', '% GDP on Edu', '% of GDP on Health']]
+y = df_reg['Per Capita GDP']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+
+# Train the model
+lasso = Lasso(alpha=0.1)  # Adjust alpha as needed
+lasso.fit(X_train, y_train)
+
+# Evaluate the model
+y_pred = lasso.predict(X_test)
+mse = mean_squared_error(y_test, y_pred)
+print("Mean squared error: %.2f" % mse)
+
+
+
+
+
+
+
+
+
+
+    
